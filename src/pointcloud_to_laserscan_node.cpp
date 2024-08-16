@@ -35,7 +35,7 @@
  */
 
 /*
- * Author: Paul Bovbel
+ * Author: Paul Bovbel, JL
  */
 
 #include "pointcloud_to_laserscan/pointcloud_to_laserscan_node.hpp"
@@ -175,11 +175,34 @@ void PointCloudToLaserScanNode::cloudCallback(
     }
   }
 
+  bool flagFirstIteration=true;
+  sensor_msgs::PointCloud2ConstIterator<float> *iter_intensity;
   // Iterate through pointcloud
   for (sensor_msgs::PointCloud2ConstIterator<float> iter_x(*cloud_msg, "x"),
     iter_y(*cloud_msg, "y"), iter_z(*cloud_msg, "z");
     iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z)
   {
+    // Ensure that the correct intensity is assigned to each point
+    if(flagFirstIteration)
+      {
+        flagFirstIteration=false;
+        try
+        {
+          iter_intensity=new sensor_msgs::PointCloud2ConstIterator<float>(*cloud_msg, "intensity");
+          scan_msg->intensities.assign(ranges_size, 0.0);
+        }
+        catch(...)
+        {
+          iter_intensity=NULL;
+          scan_msg->intensities.clear();
+        }
+      }
+      else{
+        if(scan_msg->intensities.size()>0)
+        {
+          ++(*iter_intensity);
+        }
+      }
     if (std::isnan(*iter_x) || std::isnan(*iter_y) || std::isnan(*iter_z)) {
       RCLCPP_DEBUG(
         this->get_logger(),
@@ -225,8 +248,13 @@ void PointCloudToLaserScanNode::cloudCallback(
     int index = (angle - scan_msg->angle_min) / scan_msg->angle_increment;
     if (range < scan_msg->ranges[index]) {
       scan_msg->ranges[index] = range;
+      if(index<scan_msg->intensities.size())
+        {
+          scan_msg->intensities[index] = **iter_intensity; 
+        }
     }
   }
+  if(iter_intensity) delete iter_intensity;
   pub_->publish(std::move(scan_msg));
 }
 
